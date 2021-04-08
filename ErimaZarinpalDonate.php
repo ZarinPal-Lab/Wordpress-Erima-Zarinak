@@ -1,10 +1,10 @@
 <?php
 /*
-Plugin Name: Erima Zarinpal Donate - حمایت مالی 
-Plugin URI: http://dblog.ir/?page_id=47
+Plugin Name: Erima Zarinpal Donate - حمایت مالی
+Plugin URI: https://www.zarinpal.com/lab/?p=153
 Description: افزونه حمایت مالی از وبسایت ها -- برای استفاده تنها کافی است کد زیر را درون بخشی از برگه یا نوشته خود قرار دهید  [ErimaZarinpalDonate]
-Version: 1.0
-Author:  سید امیر
+Version: 1.5
+Author:  a.y & سید امیر
 Author URI: http://dblog.ir
 */
 
@@ -20,8 +20,8 @@ if ( is_admin() )
         add_action('admin_menu', 'EZD_AdminMenuItem');
         function EZD_AdminMenuItem()
         {
-			add_menu_page( 'تنظیمات افزونه حمایت مالی - زرین پال', 'حمایت مالی', 'administrator', 'EZD_MenuItem', 'EZD_MainPageHTML', /*plugins_url( 'myplugin/images/icon.png' )*/'', 6 ); 
-			add_submenu_page('EZD_MenuItem','نمایش حامیان مالی','نمایش حامیان مالی', 'administrator','EZD_Hamian','EZD_HamianHTML');
+				add_menu_page( 'تنظیمات افزونه حمایت مالی - زرین پال', 'حمات مالی', 'administrator', 'EZD_MenuItem', 'EZD_MainPageHTML', /*plugins_url( 'myplugin/images/icon.png' )*/'', 6 );
+        add_submenu_page('EZD_MenuItem','نمایش حامیان مالی','نمایش حامیان مالی', 'administrator','EZD_Hamian','EZD_HamianHTML');
         }
 }
 
@@ -45,32 +45,32 @@ function ErimaZarinpalDonateForm() {
   $out = '';
   $error = '';
   $message = '';
-  
+
 	$MerchantID = get_option( 'EZD_MerchantID');
   $EZD_IsOK = get_option( 'EZD_IsOK');
   $EZD_IsError = get_option( 'EZD_IsError');
   $EZD_Unit = get_option( 'EZD_Unit');
-  
+
   $Amount = '';
   $Description = '';
   $Name = '';
   $Mobile = '';
   $Email = '';
-  
+
   //////////////////////////////////////////////////////////
   //            REQUEST
   if(isset($_POST['submit']) && $_POST['submit'] == 'پرداخت')
   {
-    require_once( LIBDIR . '/nusoap.php' );
-    
+
+
     if($MerchantID == '')
     {
       $error = 'کد دروازه پرداخت وارد نشده است' . "<br>\r\n";
     }
-    
-    
+
+
     $Amount = filter_input(INPUT_POST, 'EZD_Amount', FILTER_SANITIZE_SPECIAL_CHARS);
-    
+
     if(is_numeric($Amount) != false)
     {
       //Amount will be based on Toman  - Required
@@ -83,41 +83,47 @@ function ErimaZarinpalDonateForm() {
     {
       $error .= 'مبلغ به درستی وارد نشده است' . "<br>\r\n";
     }
-    
+
     $Description =    filter_input(INPUT_POST, 'EZD_Description', FILTER_SANITIZE_SPECIAL_CHARS);  // Required
     $Name =           filter_input(INPUT_POST, 'EZD_Name', FILTER_SANITIZE_SPECIAL_CHARS);  // Required
     $Mobile =         filter_input(INPUT_POST, 'mobile', FILTER_SANITIZE_SPECIAL_CHARS); // Optional
     $Email =          filter_input(INPUT_POST, 'email', FILTER_SANITIZE_SPECIAL_CHARS); // Optional
-    
-    $SendDescription = $Name . ' | ' . $Mobile . ' | ' . $Email . ' | ' . $Description ;  
-    
+
+    $SendDescription = $Name . ' | ' . $Mobile . ' | ' . $Email . ' | ' . $Description ;
+
     if($error == '') // اگر خطایی نباشد
     {
       $CallbackURL = EZD_GetCallBackURL();  // Required
-      
-      
-      // URL also Can be https://ir.zarinpal.com/pg/services/WebGate/wsdl
-      $client = new nusoap_client('https://de.zarinpal.com/pg/services/WebGate/wsdl', 'wsdl'); 
-      $client->soap_defencoding = 'UTF-8';
-      $result = $client->call('PaymentRequest', array(
-                              array(
-                                  'MerchantID' 	=> $MerchantID,
-                                  'Amount' 		=> $SendAmount,
-                                  'Description' 	=> $SendDescription,
-                                  'Email' 		=> $Email,
-                                  'Mobile' 		=> $Mobile,
-                                  'CallbackURL' 	=> $CallbackURL
-                                )
-                              )
-      );
-      
+
+
+        $data = array('merchant_id' => $MerchantID,
+            'metadata' => [
+                'mobile' => $Mobile,
+                'email' => $Email,
+            ],
+            'amount' => $SendAmount,
+            'callback_url' => $CallbackURL,
+            'description' => $SendDescription);
+        $jsonData = json_encode($data);
+        $ch = curl_init('https://api.zarinpal.com/pg/v4/payment/request.json');
+        curl_setopt($ch, CURLOPT_USERAGENT, 'ZarinPal Rest Api v1');
+        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'POST');
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $jsonData);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, array(
+            'Content-Type: application/json',
+            'Content-Length: ' . strlen($jsonData)
+        ));
+        $result = curl_exec($ch);
+        $err = curl_error($ch);
+        $result = json_decode($result, true);
+        curl_close($ch);
       //Redirect to URL You can do it also by creating a form
-      if($result['Status'] == 100)
-      {
+        if ($result['data']['code'] == 100) {
         // WruteToDB
-        
+
         EZD_AddDonate(array(
-					'Authority'     => $result['Authority'],
+					'Authority'     => $result['data']["authority"],
 					'Name'          => $Name,
 					'AmountTomaan'  => $SendAmount,
 					'Mobile'        => $Mobile,
@@ -135,37 +141,39 @@ function ErimaZarinpalDonateForm() {
           '%s',
           '%s'
         ));
-        
+
         //Header('Location: https://www.zarinpal.com/pg/StartPay/'.$result['Authority']);
-        $Location = 'https://www.zarinpal.com/pg/StartPay/'.$result['Authority'];
-		
-		echo '<script type="text/javascript" src="https://cdn.zarinpal.com/zarinak/v1/checkout.js"></script>
-						<script>
-						Zarinak.setAuthority( ' . $result['Authority'] . ');
-						Zarinak.open();
-						</script>';
-        
-        //return "<script>document.location = '${Location}'</script><center>در صورتی که به صورت خودکار به درگاه بانک منتقل نشدید <a href='${Location}'>اینجا</a> را کلیک کنید.</center>";
-      } 
-      else 
+          echo'
+<script type="text/javascript" src="https://cdn.zarinpal.com/zarinak/v1/checkout.js"></script>
+<script type="text/javascript">
+    window.onload = function () {
+        Zarinak.setAuthority("' . $result['data']["authority"] . '");
+        Zarinak.showQR();
+        Zarinak.open();
+    };
+</script>';
+
+
+      }
+      else
       {
-        $error .= EZD_GetResaultStatusString($result['Status']) . "<br>\r\n";
+        $error .= EZD_GetResaultStatusString($result['errors']['code']) . "<br>\r\n";
       }
     }
   }
   //// END REQUEST
-  
-  
+
+
   ////////////////////////////////////////////////////
   ///             RESPONSE
   if(isset($_GET['Authority']))
   {
-    require_once( LIBDIR . '/nusoap.php' );
-    
+
+
     $Authority = filter_input(INPUT_GET, 'Authority', FILTER_SANITIZE_SPECIAL_CHARS);
-    
+
     if($_GET['Status'] == 'OK'){
-        
+
       $Record = EZD_GetDonate($Authority);
       if( $Record  === false)
       {
@@ -173,35 +181,40 @@ function ErimaZarinpalDonateForm() {
       }
       else
       {
-        // URL also Can be https://ir.zarinpal.com/pg/services/WebGate/wsdl
-        $client = new nusoap_client('https://de.zarinpal.com/pg/services/WebGate/wsdl', 'wsdl'); 
-        $client->soap_defencoding = 'UTF-8';
-        $result = $client->call('PaymentVerification', array(
-                                  array(
-                                      'MerchantID'	 => $MerchantID,
-                                      'Authority' 	 => $Record['Authority'],
-                                      'Amount'	 	 => $Record['AmountTomaan']
-                                    )
-                                  )
-        );
-        
-        if($result['Status'] == 100)
-        {
+
+          $data = array('merchant_id' => $MerchantID, 'authority' => $Record['Authority'], 'amount' => $Record['AmountTomaan']);
+          $jsonData = json_encode($data);
+          $ch = curl_init('https://api.zarinpal.com/pg/v4/payment/verify.json');
+          curl_setopt($ch, CURLOPT_USERAGENT, 'ZarinPal Rest Api v1');
+          curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'POST');
+          curl_setopt($ch, CURLOPT_POSTFIELDS, $jsonData);
+          curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+          curl_setopt($ch, CURLOPT_HTTPHEADER, array(
+              'Content-Type: application/json',
+              'Content-Length: ' . strlen($jsonData)
+          ));
+          $result = curl_exec($ch);
+          $err = curl_error($ch);
+          curl_close($ch);
+          $result = json_decode($result, true);
+//print_r($result);exit;
+          if ($result['data']['code'] == 100) {
+
           EZD_ChangeStatus($Authority, 'OK');
           $message .= get_option( 'EZD_IsOk') . "<br>\r\n";
-          $message .= 'کد پیگیری تراکنش:'. $result['RefID'] . "<br>\r\n";
-          
+          $message .= 'کد پیگیری تراکنش:'. $result ['data']['ref_id'] . "<br>\r\n";
+
           $EZD_TotalAmount = get_option("EZD_TotalAmount");
           update_option("EZD_TotalAmount" , $EZD_TotalAmount + $Record['AmountTomaan']);
-        } 
-        else 
+        }
+        else
         {
           EZD_ChangeStatus($Authority, 'ERROR');
           $error .= get_option( 'EZD_IsError') . "<br>\r\n";
-          $error .= EZD_GetResaultStatusString($result['Status']) . "<br>\r\n";
+          $error .= EZD_GetResaultStatusString($result ['data']['code']) . "<br>\r\n";
         }
       }
-    } 
+    }
     else
     {
       $error .= 'تراکنش توسط کاربر بازگشت خورد';
@@ -209,9 +222,9 @@ function ErimaZarinpalDonateForm() {
     }
   }
   ///     END RESPONSE
-  
+
   $style = '';
-  
+
   if(get_option('EZD_UseCustomStyle') == 'true')
   {
     $style = get_option('EZD_CustomStyle');
@@ -220,8 +233,8 @@ function ErimaZarinpalDonateForm() {
   {
     $style = '#EZD_MainForm {  width: 400px;  height: auto;  margin: 0 auto;  direction: rtl; }  #EZD_Form {  width: 96%;  height: auto;  float: right;  padding: 10px 2%; }  #EZD_Message,#EZD_Error {  width: 90%;  margin-top: 10px;  margin-right: 2%;  float: right;  padding: 5px 2%;  border-right: 2px solid #006704;  background-color: #e7ffc5;  color: #00581f; }  #EZD_Error {  border-right: 2px solid #790000;  background-color: #ffc9c5;  color: #580a00; }  .EZD_FormItem {  width: 90%;  margin-top: 10px;  margin-right: 2%;  float: right;  padding: 5px 2%; }    .EZD_FormLabel {  width: 35%;  float: right;  padding: 3px 0; }  .EZD_ItemInput {  width: 64%;  float: left; }  .EZD_ItemInput input {  width: 90%;  float: right;  border-radius: 3px;  box-shadow: 0 0 2px #00c4ff;  border: 0px solid #c0fff0;  font-family: inherit;  font-size: inherit;  padding: 3px 5px; }  .EZD_ItemInput input:focus {  box-shadow: 0 0 4px #0099d1; }  .EZD_ItemInput input.error {  box-shadow: 0 0 4px #ef0d1e; }  input.EZD_Submit {  background: none repeat scroll 0 0 #2ea2cc;  border-color: #0074a2;  box-shadow: 0 1px 0 rgba(120, 200, 230, 0.5) inset, 0 1px 0 rgba(0, 0, 0, 0.15);  color: #fff;  text-decoration: none;  border-radius: 3px;  border-style: solid;  border-width: 1px;  box-sizing: border-box;  cursor: pointer;  display: inline-block;  font-size: 13px;  line-height: 26px;  margin: 0;  padding: 0 10px 1px;  margin: 10px auto;  width: 50%;  font: inherit;  float: right;  margin-right: 24%; }';
   }
-  
-  
+
+
 	$out = '
   <style>
     '. $style . '
@@ -229,16 +242,16 @@ function ErimaZarinpalDonateForm() {
       <div style="clear:both;width:100%;float:right;">
 	        <div id="EZD_MainForm">
           <div id="EZD_Form">';
-          
+
 if($message != '')
-{    
+{
     $out .= "<div id=\"EZD_Message\">
     ${message}
             </div>";
 }
 
 if($error != '')
-{    
+{
     $out .= "<div id=\"EZD_Error\">
     ${error}
             </div>";
@@ -292,7 +305,7 @@ if($error != '')
         </div>
       </div>
 	';
-  
+
   return $out;
 }
 
@@ -327,7 +340,7 @@ function EZD_CreateDatabaseTables()
 		add_option("EZD_TotalPayment", 0, '', 'yes');
 		add_option("EZD_IsOK", 'با تشکر پرداخت شما به درستی انجام شد.', '', 'yes');
 		add_option("EZD_IsError", 'متاسفانه پرداخت انجام نشد.', '', 'yes');
-    
+
     $style = '#EZD_MainForm {
   width: 400px;
   height: auto;
@@ -427,17 +440,17 @@ function EZD_GetDonate($Authority)
 {
   global $wpdb;
   $Authority = strip_tags($wpdb->escape($Authority));
-  
+
   if($Authority == '')
     return false;
-  
+
 	$erimaDonateTable = $wpdb->prefix . TABLE_DONATE;
 
   $res = $wpdb->get_results( "SELECT * FROM ${erimaDonateTable} WHERE Authority = '${Authority}' LIMIT 1",ARRAY_A);
-  
+
   if(count($res) == 0)
     return false;
-  
+
   return $res[0];
 }
 
@@ -447,18 +460,18 @@ function EZD_AddDonate($Data, $Format)
 
   if(!is_array($Data))
     return false;
-  
+
 	$erimaDonateTable = $wpdb->prefix . TABLE_DONATE;
 
   $res = $wpdb->insert( $erimaDonateTable , $Data, $Format);
-  
+
   if($res == 1)
   {
     $totalPay = get_option('EZD_TotalPayment');
     $totalPay += 1;
     update_option('EZD_TotalPayment', $totalPay);
   }
-  
+
   return $res;
 }
 
@@ -467,14 +480,14 @@ function EZD_ChangeStatus($Authority,$Status)
   global $wpdb;
   $Authority = strip_tags($wpdb->escape($Authority));
   $Status = strip_tags($wpdb->escape($Status));
-  
+
   if($Authority == '' || $Status == '')
     return false;
-  
+
 	$erimaDonateTable = $wpdb->prefix . TABLE_DONATE;
 
   $res = $wpdb->query( "UPDATE ${erimaDonateTable} SET `Status` = '${Status}' WHERE `Authority` = '${Authority}'");
-  
+
   return $res;
 }
 
@@ -505,23 +518,23 @@ function EZD_GetResaultStatusString($StatusNumber)
     case 101:
       return 'عملیات این تراکنش با موفقیت انجام شد ولی قبلا عملیات اعتبار سنجی بر روی این تراکنش انجام شده است';
   }
-  
+
   return '';
 }
 
 function EZD_GetCallBackURL()
 {
   $pageURL = (@$_SERVER["HTTPS"] == "on") ? "https://" : "http://";
-  
+
   $ServerName = htmlspecialchars($_SERVER["SERVER_NAME"], ENT_QUOTES, "utf-8");
   $ServerPort = htmlspecialchars($_SERVER["SERVER_PORT"], ENT_QUOTES, "utf-8");
   $ServerRequestUri = htmlspecialchars($_SERVER["REQUEST_URI"], ENT_QUOTES, "utf-8");
-  
+
   if ($_SERVER["SERVER_PORT"] != "80")
   {
       $pageURL .= $ServerName .":". $ServerPort . $_SERVER["REQUEST_URI"];
-  } 
-  else 
+  }
+  else
   {
       $pageURL .= $ServerName . $ServerRequestUri;
   }
